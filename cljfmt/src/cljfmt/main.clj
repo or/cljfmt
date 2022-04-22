@@ -27,6 +27,9 @@
 (defn- grep [re dir]
   (filter #(re-find re (relative-path dir %)) (file-seq (io/file dir))))
 
+(defn- stdin-argument? [arg]
+  (= arg "-"))
+
 (defn- find-files [{:keys [file-pattern]} f]
   (let [f (io/file f)]
     (when-not (.exists f) (abort "No such file:" (str f)))
@@ -38,7 +41,9 @@
   ((cljfmt/wrap-normalize-newlines #(cljfmt/reformat-string % options)) s))
 
 (defn- project-path [{:keys [project-root]} file]
-  (-> project-root (or ".") io/file (relative-path (io/file file))))
+  (if (= file :stdin)
+    "stdin"
+    (-> project-root (or ".") io/file (relative-path (io/file file)))))
 
 (defn- format-diff
   ([options file]
@@ -54,7 +59,7 @@
 (def ^:private zero-counts {:okay 0, :incorrect 0, :error 0})
 
 (defn- check-one [options file]
-  (let [original (slurp file)
+  (let [original (if (= file :stdin) (slurp *in*) (slurp file))
         status   {:counts zero-counts :file file}]
     (try
       (let [revised (reformat-string options original)]
@@ -121,15 +126,34 @@
      (print-final-count counts)
      (exit counts))))
 
+(defn check-stdin
+  "Checks the formatting (as per `options`) of the Clojure code
+  read from stdin."
+  ([]
+   (check-stdin {}))
+  ([options]
+   (let [result (check-one options :stdin)]
+     (print-file-status options result)
+     (print-final-count (:counts result)))))
+
+
 (defn- fix-one [options file]
-  (let [original (slurp file)]
+  (let [original (if (= file :stdin) (slurp *in*) (slurp file))]
     (try
       (let [revised (reformat-string options original)]
+        (when (= file :stdin)
+          (print revised)
+          (flush))
         (if (not= original revised)
-          (do (spit file revised)
-              {:file file :reformatted true})
+          (do
+            (when (not= file :stdin)
+              (spit file revised))
+            {:file file :reformatted true})
           {:file file}))
       (catch Exception e
+        (when (= file :stdin)
+          (print original)
+          (flush))
         {:file file :exception e}))))
 
 (defn fix
@@ -144,6 +168,16 @@
           (map* (partial fix-one options))
           (map (partial print-file-status options))
           dorun))))
+
+(defn fix-stdin
+  "Applies the formatting (as per `options`) to the Clojure code
+  read from stdin and writes it to stdout."
+  ([]
+   (fix-stdin {}))
+  ([options]
+   (let [result (fix-one options :stdin)]
+     (when (:exception result)
+       (print-file-status options result)))))
 
 (defn- cli-file-reader [filepath]
   (let [contents (slurp filepath)]
@@ -232,15 +266,18 @@
         parsed-opts   (cli/parse-opts args (cli-options defaults))
         [cmd & paths] (:arguments parsed-opts)
         options       (merge-options defaults (:options parsed-opts))
-        paths         (or (seq paths) (filter file-exists? default-paths))]
+        paths         (or (seq paths) (filter file-exists? default-paths))
+        stdin?        (some stdin-argument? paths)]
+    (when (and stdin? (> (count paths) 1))
+      (abort "Only one argument allowed with '-'"))
     (if (:errors parsed-opts)
       (abort (:errors parsed-opts))
       (if (or (nil? cmd) (:help options))
         (do (println "cljfmt [OPTIONS] COMMAND [PATHS ...]")
             (println (:summary parsed-opts)))
         (do (case cmd
-              "check" (check paths options)
-              "fix"   (fix paths options)
+              "check" (if stdin? (check-stdin options) (check paths options))
+              "fix"   (if stdin? (fix-stdin options) (fix paths options))
               (abort "Unknown cljfmt command:" cmd))
             (when (:parallel? options)
               (shutdown-agents)))))))
