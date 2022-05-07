@@ -24,9 +24,6 @@
       (.relativize (.toAbsolutePath (.toPath file)))
       (.toString)))
 
-(defn- filename-ext [filename]
-  (subs filename (inc (str/last-index-of filename "."))))
-
 (defn- grep [re dir]
   (filter #(re-find re (relative-path dir %)) (file-seq (io/file dir))))
 
@@ -150,9 +147,7 @@
 
 (defn- cli-file-reader [filepath]
   (let [contents (slurp filepath)]
-    (if (= (filename-ext filepath) "clj")
-      (read-string contents)
-      (edn/read-string contents))))
+    (edn/read-string contents)))
 
 (defn- parent-dirs [^String root]
   (->> (.getAbsoluteFile (io/file root))
