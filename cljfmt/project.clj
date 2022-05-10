@@ -39,4 +39,7 @@
                   :main cljfmt.main
                   :jvm-opts ["-Dclojure.compiler.direct-linking=true"
                              "-Dclojure.spec.skip-macros=true"]}
+   :pgo-instrument {:native-image {:opts ["--pgo-instrument"]}}
+   :pgo {:native-image {:opts ["--pgo=default.iprof"]}}
+   :no-gc {:native-image {:opts ["--gc=epsilon"]}}
    :provided {:dependencies [[org.clojure/clojurescript "1.11.4"]]}})
