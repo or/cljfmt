@@ -32,6 +32,7 @@
           "-H:Log=registerResource:"
           "--no-fallback"
           "-J-Xmx3g"]}
+  :main cljfmt.main
   :profiles
   {:uberjar {:main cljfmt.main
              :aot :all}
