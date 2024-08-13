@@ -212,8 +212,7 @@
 (defn merge-options
   "Merge two maps of cljfmt options together."
   [a b]
-  (-> (merge a b)
-      (assoc :indents (merge (:indents a {}) (:indents b)))))
+  (merge a b))
 
 (def default-paths ["src" "test" "project.clj"])
 
